@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "seed": "tsx scripts/seed.ts",
+    "bootstrap": "tsx --tsconfig scripts/tsconfig.json scripts/bootstrap.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "tsx scripts/smoke.ts",
@@ -17,6 +18,7 @@
     "verify:uploads": "tsx --tsconfig scripts/tsconfig.json scripts/verify-uploads.ts",
     "verify:reminders": "tsx --tsconfig scripts/tsconfig.json scripts/verify-reminders.ts",
     "verify:promotions": "tsx --tsconfig scripts/tsconfig.json scripts/verify-promotions.ts",
+    "verify:bootstrap": "tsx --tsconfig scripts/tsconfig.json scripts/verify-bootstrap.ts",
     "verify": "npm run smoke && npm run verify:email && npm run verify:uploads && npm run verify:reminders && npm run verify:promotions"
   },
   "dependencies": {

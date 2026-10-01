@@ -20,6 +20,7 @@ internal staff member created and managed by an administrator.
 - [Environment variables](#environment-variables)
 - [MongoDB setup](#mongodb-setup)
 - [Seeding](#seeding)
+- [First run on a real database](#first-run-on-a-real-database)
 - [Development sign-in](#development-sign-in)
 - [Commands](#commands)
 - [Payment setup](#payment-setup)
@@ -171,6 +172,57 @@ consistent rather than invented.
 
 ---
 
+## First run on a real database
+
+`npm run seed` is for development only: it writes a whole demo practice — 34
+invented patients, 140 bookings, fabricated revenue. None of that belongs on a
+live site, and a fresh production database has no users at all, so **there is
+nothing to sign in with until you bootstrap it.** An empty database is the usual
+reason a deployed admin login fails.
+
+```bash
+MONGODB_URI="<your production URI>" \
+  npm run bootstrap -- --email you@clinic.ng --name "Your Name"
+```
+
+That synchronises indexes, writes the role catalogue and the default settings,
+and creates exactly one super admin. It writes no demo rows, and it is safe to
+re-run: roles and settings are upserted, existing settings are never reverted to
+defaults, and an existing user is never overwritten.
+
+The password comes from `ADMIN_PASSWORD`, or is generated and printed once if
+that is unset. It is never accepted on the command line, because argv is visible
+to other processes and lands in shell history. The script refuses the
+development defaults that are public in this repository, and enforces the same
+password rules as the sign-up form.
+
+Note `MONGODB_URI` on the command line wins over `.env.local` here,
+deliberately — unlike the development scripts, which override it. Bootstrapping
+the wrong database is a mistake worth making hard, so the script also prints the
+database name it connected to.
+
+Two things that are easy to get wrong:
+
+- **Include the database name in the URI.** `mongodb+srv://…mongodb.net/?retryWrites=true`
+  has none, so the driver quietly uses Atlas's default `test` database. You want
+  `mongodb+srv://…mongodb.net/nurseoncall?retryWrites=true&w=majority`.
+- **Allow your host's IPs in Atlas.** Vercel's are dynamic, so Network Access
+  needs `0.0.0.0/0` there, which is why the database user's password is the only
+  thing protecting it. Keep it long and keep it out of Git.
+
+To check the result:
+
+```bash
+MONGODB_URI="<uri>" ADMIN_PASSWORD="<password>" \
+  npm run verify:bootstrap -- you@clinic.ng
+```
+
+That replays every condition the login action applies to the new account, so a
+sign-in failure is distinguishable from a bootstrap failure before you go
+hunting.
+
+---
+
 ## Development sign-in
 
 All seeded accounts share one password. **These are development credentials
@@ -204,7 +256,9 @@ Change `SEED_ADMIN_PASSWORD` in `.env.local` to use a different one.
 | `npm run lint`                                             | ESLint                                                                   |
 | `npm run format`                                           | Prettier                                                                 |
 | `npm test`                                                 | Vitest (80 tests)                                                        |
-| `npm run seed`                                             | Seed the database                                                        |
+| `npm run seed`                                             | Seed the demo dataset (development only)                                 |
+| `npm run bootstrap`                                        | Roles, settings and one super admin, no demo data (production)           |
+| `npm run verify:bootstrap`                                 | Checks a bootstrapped admin against the login action's conditions        |
 | `npm run smoke`                                            | End-to-end HTTP walk-through of every route (dev server must be running) |
 | `npm run verify:email`                                     | Delivers to a throwaway local SMTP server and inspects the bytes         |
 | `npm run verify:uploads`                                   | Upload route guards: role, folder, size, file signature                  |
@@ -584,11 +638,14 @@ and database - `npm run verify:email` needs neither.
    `NEXT_PUBLIC_APP_URL`.
 3. `npm run build && npm start`, or deploy to Vercel.
 4. Register the webhook URL with each payment gateway.
-5. Seed only the roles and settings, **not** the demo users:
+5. Create the roles, settings and your super admin — **not** the demo data:
    ```bash
-   npm run seed          # then delete the demo accounts, or write a prod seed
+   MONGODB_URI="<production URI>" \
+     npm run bootstrap -- --email you@clinic.ng --name "Your Name"
    ```
-6. Create your real super admin and change every default password.
+   Without this the database is empty and no one can sign in. Do **not** run
+   `npm run seed` against production; it writes a demo practice.
+6. Sign in and change that password immediately.
 7. Set `CRON_SECRET` and `CRON_INTERVAL_HOURS`, then confirm the schedule is
    live. Without the secret, reminders are never sent:
    ```bash
