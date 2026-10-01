@@ -58,6 +58,32 @@ export async function connectDB(): Promise<typeof mongoose> {
   return cached.conn;
 }
 
+/**
+ * True when an error means "the database could not be reached", as opposed to
+ * the query being wrong.
+ *
+ * Worth distinguishing because the two want opposite handling: a rejected
+ * query is a bug to surface, while an unreachable cluster is an outage the
+ * visitor should be told about in plain words. The usual cause in production
+ * is an IP allowlist that does not include the host — on a serverless platform
+ * the outbound addresses are dynamic, so the allowlist has to be open and the
+ * database password is what protects the cluster.
+ */
+export function isConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const name = String((error as { name?: unknown }).name ?? '');
+  return (
+    name === 'MongooseServerSelectionError' ||
+    name === 'MongoServerSelectionError' ||
+    name === 'MongoNetworkError' ||
+    name === 'MongoNetworkTimeoutError' ||
+    name === 'MongoTimeoutError' ||
+    /ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN/.test(
+      String((error as { message?: unknown }).message ?? ''),
+    )
+  );
+}
+
 /** True when a replica set is available, which is what transactions require. */
 export async function supportsTransactions(): Promise<boolean> {
   try {

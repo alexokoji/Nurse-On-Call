@@ -683,9 +683,29 @@ now reports both rather than leaving you to infer them:
 | Admin sign-in rejects correct credentials            | The database has no users. Run `npm run bootstrap` — see [First run on a real database](#first-run-on-a-real-database) |
 | Sign-up or sign-in returns 500, pages otherwise load | `AUTH_SECRET` missing or under 16 characters. Sessions cannot be signed, and only submitting reveals it                |
 | Everything is empty though the database has data     | `MONGODB_URI` has no database name, so the driver used its default (`test` on Atlas)                                   |
+| Sign-up says "we cannot reach our records"           | The database is unreachable — on Atlas this is almost always Network Access, see below                                 |
 | Pages load but any data query fails                  | `MONGODB_URI` unset, or the host's IPs are not allowed in Atlas Network Access                                         |
 | Password reset emails never arrive                   | `EMAIL_PROVIDER` is still `console`, which delivers nothing                                                            |
 | Reminders never send                                 | `CRON_SECRET` unset, so `/api/cron` refuses to run                                                                     |
+
+### Atlas Network Access
+
+A serverless host has no fixed outbound IP addresses, so an Atlas allowlist
+containing only your own address rejects it — while everything keeps working
+from your laptop, which is the confusing part. `/api/health` reports
+`database: unreachable`, and the runtime log carries Mongoose's own
+"IP that isn't whitelisted" message.
+
+Atlas → **Network Access** → **Add IP Address** → `0.0.0.0/0`. There is no
+narrower range to allow. The consequence is that the database user's password
+becomes the only thing protecting the cluster, so keep it long, keep it out of
+Git, and rotate it if it is ever pasted anywhere.
+
+An unreachable database no longer reaches the visitor as a crash: both auth
+actions catch connection failures specifically — `isConnectionError()` in
+`lib/db/connect.ts` — and return "we cannot reach our records right now, so
+nothing was saved". Any other error is rethrown untouched, so real bugs stay
+visible.
 
 ### Why a 500 on sign-up was worth fixing properly
 

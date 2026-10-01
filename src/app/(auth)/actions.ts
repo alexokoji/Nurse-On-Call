@@ -2,7 +2,7 @@
 
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { connectDB } from '@/lib/db/connect';
+import { connectDB, isConnectionError } from '@/lib/db/connect';
 import { User, PatientProfile, Consent, nextReference } from '@/models';
 import { hashPassword, verifyPassword, createToken, hashToken } from '@/lib/auth/password';
 import {
@@ -51,6 +51,24 @@ const GENERIC_LOGIN_ERROR = 'That email and password combination is not correct.
  * The message the visitor sees says nothing about environment variables. The
  * detail goes to the server log, where the operator who can fix it will look.
  */
+/**
+ * The database is unreachable. Distinct from a rejected query: there is nothing
+ * wrong with the request, so the visitor gets plain words and a phone number
+ * rather than the generic crash screen, and the detail goes to the log.
+ *
+ * In production the usual cause is a database IP allowlist that does not
+ * include the host's outbound addresses.
+ */
+function databaseFailure(where: string, error: unknown): ActionResult {
+  console.error(`[auth] ${where} failed: database unreachable —`, error);
+  return {
+    ok: false,
+    message:
+      'We cannot reach our records right now, so nothing was saved. ' +
+      'Please try again in a moment, or call us on 0800 123 4567.',
+  };
+}
+
 function sessionConfigFailure(where: string): ActionResult | null {
   if (isSessionConfigured()) return null;
   console.error(`[auth] ${where} refused: ${SESSION_CONFIG_ERROR}`);
@@ -62,7 +80,7 @@ function sessionConfigFailure(where: string): ActionResult | null {
   };
 }
 
-export async function loginAction(_prev: unknown, formData: FormData): Promise<ActionResult> {
+async function loginActionInner(_prev: unknown, formData: FormData): Promise<ActionResult> {
   const parsed = loginSchema.safeParse({
     email: formData.get('email'),
     password: formData.get('password'),
@@ -161,7 +179,7 @@ export async function loginAction(_prev: unknown, formData: FormData): Promise<A
   redirect(safeRedirect(next, ADMIN_ROLES.includes(user.role) ? '/admin' : '/patient/dashboard'));
 }
 
-export async function registerAction(_prev: unknown, formData: FormData): Promise<ActionResult> {
+async function registerActionInner(_prev: unknown, formData: FormData): Promise<ActionResult> {
   const parsed = registerSchema.safeParse({
     name: formData.get('name'),
     email: formData.get('email'),
@@ -380,4 +398,31 @@ async function issueSession(user: {
 function safeRedirect(next: string, fallback: string): string {
   if (!next.startsWith('/') || next.startsWith('//')) return fallback;
   return next;
+}
+
+/* ── Outer wrappers ───────────────────────────────────────────────────
+   An unreachable database should not reach the visitor as a crash screen.
+
+   The guard sits out here, around the whole action, because a server
+   selection timeout surfaces on whichever query runs first — there is no one
+   line to wrap. `redirect()` works by throwing, and that throw is not a
+   connection error, so it passes straight through to Next as intended. Any
+   other error is rethrown untouched: a genuine bug must stay visible. */
+
+export async function loginAction(prev: unknown, formData: FormData): Promise<ActionResult> {
+  try {
+    return await loginActionInner(prev, formData);
+  } catch (error) {
+    if (isConnectionError(error)) return databaseFailure('login', error);
+    throw error;
+  }
+}
+
+export async function registerAction(prev: unknown, formData: FormData): Promise<ActionResult> {
+  try {
+    return await registerActionInner(prev, formData);
+  } catch (error) {
+    if (isConnectionError(error)) return databaseFailure('registration', error);
+    throw error;
+  }
 }
