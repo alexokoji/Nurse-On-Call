@@ -56,7 +56,15 @@ async function main() {
     await Setting.countDocuments(),
     Object.keys(DEFAULT_SETTINGS).length,
   );
-  expect('no demo users were created', await User.countDocuments({ role: 'patient' }), 0);
+  /* Not "no patients exist" — a live database legitimately has real ones, and
+     asserting otherwise fails the moment someone signs up. What must be true is
+     that bootstrap wrote none of the seed script's invented people, every one of
+     whom has an @example.com address. */
+  expect(
+    'no demo patients were written',
+    await User.countDocuments({ email: /@example\.com$/i }),
+    0,
+  );
 
   /* ── Exactly what loginAction checks, in its order ──────────────── */
 

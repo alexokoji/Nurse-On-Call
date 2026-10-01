@@ -64,6 +64,32 @@ function generatePassword(): string {
   return `Aa1${body}`.slice(0, 24);
 }
 
+/**
+ * Connect, retrying transient name-resolution failures.
+ *
+ * A `mongodb+srv://` URI resolves the cluster through a DNS SRV and TXT lookup
+ * before any socket is opened, and those queries fail intermittently on plenty
+ * of networks — ESERVFAIL on one attempt and fine on the next. A one-shot
+ * connect turns that into "bootstrap failed", which reads like a credentials or
+ * allowlist problem and sends you looking in the wrong place. Genuine failures
+ * (bad password, blocked IP) are not retried: they are reported immediately.
+ */
+async function connectWithRetry(uri: string, attempts = 6): Promise<void> {
+  const transient = /ESERVFAIL|EAI_AGAIN|ETIMEDOUT|ENOTFOUND|querySrv|queryTxt/;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: 20_000 });
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!transient.test(message) || attempt === attempts) throw error;
+      log(`DNS lookup failed (${message.split('\n')[0]}) — retrying ${attempt}/${attempts - 1}`);
+      await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+    }
+  }
+}
+
 async function main() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is not set.');
@@ -97,7 +123,7 @@ async function main() {
   }
 
   console.log('\n🏁 Bootstrapping NurseOnCall\n');
-  await mongoose.connect(uri);
+  await connectWithRetry(uri);
 
   /* Print the database name, not just a masked URI. Writing an admin into the
      wrong database is the mistake this script must never make quietly. */
