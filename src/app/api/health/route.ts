@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { connectDB } from '@/lib/db/connect';
 import { emailTransportStatus } from '@/lib/notifications/transports';
 import { isStorageConfigured } from '@/lib/storage/cloudinary';
+import { isSessionConfigured } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +48,13 @@ export async function GET() {
     ? { ok: true }
     : { ok: false, detail: 'CRON_SECRET not set' };
 
-  const healthy = checks.database.ok;
+  /* Sessions. Unlike email or storage this is not a degraded feature: without
+     it nobody can sign in or register at all, so it counts towards health. */
+  checks.sessions = isSessionConfigured()
+    ? { ok: true }
+    : { ok: false, detail: 'AUTH_SECRET missing or too short' };
+
+  const healthy = checks.database.ok && checks.sessions.ok;
 
   return NextResponse.json(
     {

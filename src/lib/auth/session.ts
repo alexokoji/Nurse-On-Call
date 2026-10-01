@@ -23,12 +23,37 @@ export interface SessionPayload extends JWTPayload {
   v: number;
 }
 
-function getSecret(): Uint8Array {
+/** The shortest secret worth signing with. */
+const MIN_SECRET_LENGTH = 16;
+
+/**
+ * Whether sessions can be issued at all.
+ *
+ * Separate from `getSecret()` so callers can check *before* doing work that
+ * would otherwise be half-finished. Registration used to write the user, their
+ * profile and their consent record and only then discover it could not sign
+ * them in: the account existed, the request 500'd, and every retry reported
+ * "an account already exists" — unrecoverable from the UI.
+ */
+export function isSessionConfigured(): boolean {
   const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 16) {
-    throw new Error('AUTH_SECRET is missing or too short. Set a 32-byte random value in .env.local');
-  }
-  return new TextEncoder().encode(secret);
+  return Boolean(secret) && String(secret).length >= MIN_SECRET_LENGTH;
+}
+
+/**
+ * The deployment is misconfigured, not the request. Mentioning .env.local here
+ * was actively misleading on a hosted deployment, where that file does not
+ * exist — it is gitignored and never deployed, so every variable has to be set
+ * in the host's own environment settings.
+ */
+export const SESSION_CONFIG_ERROR =
+  'AUTH_SECRET is missing or shorter than 16 characters. Set it in your hosting ' +
+  "provider's environment variables (or .env.local when running locally) to a " +
+  'long random value, e.g. `openssl rand -base64 32`.';
+
+function getSecret(): Uint8Array {
+  if (!isSessionConfigured()) throw new Error(SESSION_CONFIG_ERROR);
+  return new TextEncoder().encode(process.env.AUTH_SECRET);
 }
 
 export function sessionMaxAge(): number {
@@ -36,9 +61,7 @@ export function sessionMaxAge(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60 * 60 * 24 * 7;
 }
 
-export async function signSession(
-  payload: Omit<SessionPayload, 'iat' | 'exp'>,
-): Promise<string> {
+export async function signSession(payload: Omit<SessionPayload, 'iat' | 'exp'>): Promise<string> {
   const maxAge = sessionMaxAge();
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })

@@ -5,7 +5,13 @@ import { redirect } from 'next/navigation';
 import { connectDB } from '@/lib/db/connect';
 import { User, PatientProfile, Consent, nextReference } from '@/models';
 import { hashPassword, verifyPassword, createToken, hashToken } from '@/lib/auth/password';
-import { SESSION_COOKIE, signSession, sessionCookieOptions } from '@/lib/auth/session';
+import {
+  SESSION_COOKIE,
+  SESSION_CONFIG_ERROR,
+  isSessionConfigured,
+  signSession,
+  sessionCookieOptions,
+} from '@/lib/auth/session';
 import { rateLimit, RATE_LIMITS, clientIp, resetRateLimit } from '@/lib/auth/rate-limit';
 import { getSettings } from '@/lib/settings';
 import { recordAudit } from '@/lib/audit';
@@ -35,6 +41,27 @@ import { ADMIN_ROLES } from '@/types';
 
 const GENERIC_LOGIN_ERROR = 'That email and password combination is not correct.';
 
+/**
+ * A deployment that cannot sign sessions cannot sign anyone in, so both
+ * entry points check before doing anything persistent. Checked here rather
+ * than deeper down because registration writes three documents before it
+ * would reach `issueSession`, and a throw there leaves an account that exists
+ * but can never be signed into — and whose email is then taken.
+ *
+ * The message the visitor sees says nothing about environment variables. The
+ * detail goes to the server log, where the operator who can fix it will look.
+ */
+function sessionConfigFailure(where: string): ActionResult | null {
+  if (isSessionConfigured()) return null;
+  console.error(`[auth] ${where} refused: ${SESSION_CONFIG_ERROR}`);
+  return {
+    ok: false,
+    message:
+      'Sign-in is temporarily unavailable because of a server configuration problem. ' +
+      'Nothing was saved. Please try again shortly, or call us on 0800 123 4567.',
+  };
+}
+
 export async function loginAction(_prev: unknown, formData: FormData): Promise<ActionResult> {
   const parsed = loginSchema.safeParse({
     email: formData.get('email'),
@@ -45,6 +72,9 @@ export async function loginAction(_prev: unknown, formData: FormData): Promise<A
   if (!parsed.success) {
     return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   }
+
+  const configError = sessionConfigFailure('login');
+  if (configError) return configError;
 
   const { email, password } = parsed.data;
   const ip = clientIp(await headers());
@@ -95,7 +125,10 @@ export async function loginAction(_prev: unknown, formData: FormData): Promise<A
     return { ok: false, message: 'This account has been suspended. Please contact support.' };
   }
   if (user.status === 'inactive') {
-    return { ok: false, message: 'This account is inactive. Please contact support to reactivate it.' };
+    return {
+      ok: false,
+      message: 'This account is inactive. Please contact support to reactivate it.',
+    };
   }
   if (security.requireEmailVerification && !user.emailVerifiedAt && user.role === 'patient') {
     return { ok: false, message: 'Please verify your email address before signing in.' };
@@ -111,7 +144,13 @@ export async function loginAction(_prev: unknown, formData: FormData): Promise<A
   await issueSession(user);
 
   await recordAudit({
-    actor: { id: String(user._id), name: user.name, email: user.email, role: user.role, permissions: [] },
+    actor: {
+      id: String(user._id),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      permissions: [],
+    },
     action: 'auth.login',
     entity: 'User',
     entityId: String(user._id),
@@ -142,6 +181,9 @@ export async function registerAction(_prev: unknown, formData: FormData): Promis
   if (!limit.success) {
     return { ok: false, message: 'Too many sign-up attempts. Please try again later.' };
   }
+
+  const configError = sessionConfigFailure('registration');
+  if (configError) return configError;
 
   const { name, email, phone, password } = parsed.data;
 

@@ -33,6 +33,7 @@ internal staff member created and managed by an administrator.
 - [Security](#security)
 - [Testing](#testing)
 - [Deployment](#deployment)
+- [Troubleshooting a deployment](#troubleshooting-a-deployment)
 - [Known gaps](#known-gaps)
 
 ---
@@ -634,8 +635,9 @@ and database - `npm run verify:email` needs neither.
 ## Deployment
 
 1. Provision MongoDB (Atlas recommended) and allow your host's IPs.
-2. Set every environment variable — especially a real `AUTH_SECRET` and
-   `NEXT_PUBLIC_APP_URL`.
+2. Set every environment variable in your host's settings — `.env.local` is
+   never deployed. `AUTH_SECRET` must be at least 16 characters: without it
+   nobody can sign in or register, and the server log will say so on boot.
 3. `npm run build && npm start`, or deploy to Vercel.
 4. Register the webhook URL with each payment gateway.
 5. Create the roles, settings and your super admin — **not** the demo data:
@@ -660,6 +662,43 @@ daily, which is the most the Hobby plan allows; see
 [Scheduled tasks](#scheduled-tasks) for a tighter schedule. Middleware runs on the Edge; the
 rest is Node (Mongoose requires it, which is why it is in
 `serverExternalPackages`).
+
+---
+
+## Troubleshooting a deployment
+
+`.env.local` is gitignored and **never deployed**, so nothing in it applies to a
+hosted deployment. Every variable has to be set in the host's own environment
+settings. Two consequences account for most first-deploy failures, and the app
+now reports both rather than leaving you to infer them:
+
+- **The server logs a configuration summary on boot.** `src/instrumentation.ts`
+  runs once per server instance and lists anything missing, so a misconfigured
+  deployment says so in the log instead of waiting for a visitor to find it.
+- **`GET /api/health` returns 503** when the database is unreachable _or_
+  sessions cannot be signed, and names which. Check it first.
+
+| Symptom                                              | Cause                                                                                                                  |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Admin sign-in rejects correct credentials            | The database has no users. Run `npm run bootstrap` — see [First run on a real database](#first-run-on-a-real-database) |
+| Sign-up or sign-in returns 500, pages otherwise load | `AUTH_SECRET` missing or under 16 characters. Sessions cannot be signed, and only submitting reveals it                |
+| Everything is empty though the database has data     | `MONGODB_URI` has no database name, so the driver used its default (`test` on Atlas)                                   |
+| Pages load but any data query fails                  | `MONGODB_URI` unset, or the host's IPs are not allowed in Atlas Network Access                                         |
+| Password reset emails never arrive                   | `EMAIL_PROVIDER` is still `console`, which delivers nothing                                                            |
+| Reminders never send                                 | `CRON_SECRET` unset, so `/api/cron` refuses to run                                                                     |
+
+### Why a 500 on sign-up was worth fixing properly
+
+Registration used to write the user, their patient profile and their consent
+record, and _only then_ sign them in. With `AUTH_SECRET` missing that last step
+threw: the request 500'd, but the account already existed — so every retry
+answered "an account already exists with this email", with no way out from the
+UI. The account was created and unusable at the same time.
+
+Both entry points now check that sessions can be signed **before** writing
+anything, and return an ordinary form error. The visitor is told nothing was
+saved, because nothing was; the variable name goes to the server log, where the
+person who can fix it will look. `tests/auth-config.test.ts` covers it.
 
 ---
 
