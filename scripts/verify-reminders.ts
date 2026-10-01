@@ -128,6 +128,37 @@ async function main() {
   expect('an appointment 20 days out is not reminded', third.sent, 0);
   expect('…and keeps reminderSentAt null', stillUnsent?.reminderSentAt ?? null, null);
 
+  /* ── The scheduler gap ─────────────────────────────────────────────
+     A 24-hour lead time and a once-daily cron cannot both be satisfied
+     exactly: an appointment 30 hours out is too far away for a run that
+     only looks 24 hours ahead, and by the next daily run it is 6 hours
+     away — past the lead time. Widening the window by one interval is
+     what stops it falling through. */
+
+  const thirtyHours = new Date(Date.now() + 30 * 60 * 60 * 1000);
+  const resetToGap = () =>
+    Booking.updateOne(
+      { reference: REFERENCE },
+      { $set: { reminderSentAt: null, startAt: thirtyHours, dateKey: toDateKey(thirtyHours) } },
+    );
+
+  await resetToGap();
+  process.env.CRON_INTERVAL_HOURS = '1';
+  const hourly = await sendDueReminders();
+  expect('on a 15-minute schedule, 30 hours out is not yet due', hourly.sent, 0);
+
+  await resetToGap();
+  process.env.CRON_INTERVAL_HOURS = '24';
+  const daily = await sendDueReminders();
+  expect('on a daily schedule, the same booking is reminded', daily.sent >= 1, true);
+
+  await resetToGap();
+  process.env.CRON_INTERVAL_HOURS = 'nonsense';
+  const defaulted = await sendDueReminders();
+  expect('an unparseable interval falls back to daily', defaulted.sent >= 1, true);
+
+  delete process.env.CRON_INTERVAL_HOURS;
+
   await cleanup();
   await mongoose.disconnect();
 

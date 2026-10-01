@@ -23,6 +23,17 @@ export interface ReminderRun {
   failed: number;
 }
 
+/**
+ * How often /api/cron is actually called, in hours. Clamped: a nonsense value
+ * must not silently widen the window to the point where every future booking
+ * is "due", nor narrow it to zero and strand reminders.
+ */
+function cronIntervalHours(): number {
+  const parsed = Number(process.env.CRON_INTERVAL_HOURS);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 24;
+  return Math.min(parsed, 24);
+}
+
 export async function sendDueReminders(): Promise<ReminderRun> {
   await connectDB();
 
@@ -33,8 +44,20 @@ export async function sendDueReminders(): Promise<ReminderRun> {
    * The window: appointments starting between now and the configured lead
    * time. Anything already past is excluded — a reminder for an appointment
    * that has started is noise, not a service.
+   *
+   * The lead time is widened by one scheduler interval, because a reminder can
+   * only go out on a run. With a daily cron and a 24-hour lead time, a 07:00
+   * appointment falls between two 06:00 runs: the first is an hour too early
+   * to match it, the second is an hour too late to be a reminder. Adding the
+   * interval closes that gap — a reminder may arrive earlier than the lead
+   * time, but never after the appointment it is reminding about.
+   *
+   * Set CRON_INTERVAL_HOURS to match your schedule. It defaults to 24, which
+   * is the most forgiving value and what Vercel's Hobby plan allows.
    */
-  const windowEnd = new Date(now.getTime() + settings.reminderHoursBefore * 60 * 60 * 1000);
+  const intervalHours = cronIntervalHours();
+  const leadHours = settings.reminderHoursBefore + intervalHours;
+  const windowEnd = new Date(now.getTime() + leadHours * 60 * 60 * 1000);
 
   const due = await Booking.find({
     status: 'confirmed',

@@ -119,6 +119,7 @@ Copy `.env.example` to `.env.local`. Only two are required to boot:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`                 | with `smtp`           | Port 465 is implicit TLS; 587 upgrades with STARTTLS                                                          |
 | `SMS_PROVIDER`, `TERMII_API_KEY`                                       | no                    | `console` (default) prints SMS to the terminal                                                                |
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | no                    | Enables image upload; without them image fields accept a URL                                                  |
+| `CRON_INTERVAL_HOURS`                                                  | no                    | How often `/api/cron` really runs (default `24`). Widens the reminder window so nothing falls between runs    |
 | `CRON_SECRET`                                                          | **yes in production** | `openssl rand -hex 32`. Without it `/api/cron` refuses to run, so holds never expire and reminders never send |
 
 **Never commit `.env.local`.** It is gitignored. Gateway keys, SMTP passwords
@@ -351,11 +352,38 @@ unset it returns `503` rather than running unauthenticated. The comparison uses
 `timingSafeEqual`. Vercel Cron sends the secret as `Authorization: Bearer`;
 other schedulers can send `x-cron-secret`.
 
-On Vercel, `vercel.json` already registers it every 15 minutes. Anywhere else:
+### Schedule
+
+`vercel.json` registers it **once a day at 06:00 UTC**, because Vercel's Hobby
+plan rejects any cron that would run more than once per day. On Pro, or on any
+other host, a tighter schedule is better:
 
 ```bash
 */15 * * * * curl -fsS -H "x-cron-secret: $CRON_SECRET" https://your-domain/api/cron
 ```
+
+A free external pinger (cron-job.org, UptimeRobot, a GitHub Actions schedule)
+sending the `x-cron-secret` header works just as well and keeps the deployment
+on Hobby.
+
+Whatever you choose, set `CRON_INTERVAL_HOURS` to match it — `24` for the daily
+default, `0.25` for every 15 minutes.
+
+### Why the interval matters
+
+Neither job breaks on a daily schedule, but for different reasons.
+
+**Holds** do not depend on the cron at all: `expireStaleHolds()` also runs on
+every availability request, so an abandoned hold is released the moment anyone
+next looks at that date. The cron is only a backstop for slots nobody queries.
+
+**Reminders** can only go out on a run, so a 24-hour lead time and a once-daily
+cron cannot both be honoured exactly: an appointment 30 hours away is too far
+off for a run looking 24 hours ahead, and by the next daily run it is 6 hours
+away — past its own lead time. The window is therefore widened by one interval,
+so a reminder may arrive earlier than the configured lead time but never after
+the appointment. `CRON_INTERVAL_HOURS` is what tells it how much slack to
+allow; an unparseable or absent value falls back to the most forgiving 24.
 
 Reminders are claimed atomically: `reminderSentAt` is stamped by a conditional
 update _before_ the message is dispatched, and released again if dispatch fails.
@@ -561,8 +589,8 @@ and database - `npm run verify:email` needs neither.
    npm run seed          # then delete the demo accounts, or write a prod seed
    ```
 6. Create your real super admin and change every default password.
-7. Set `CRON_SECRET` and confirm the schedule is live. Without it, abandoned
-   holds are never released and reminders are never sent:
+7. Set `CRON_SECRET` and `CRON_INTERVAL_HOURS`, then confirm the schedule is
+   live. Without the secret, reminders are never sent:
    ```bash
    curl -i -H "x-cron-secret: $CRON_SECRET" https://your-domain/api/cron
    ```
@@ -570,7 +598,9 @@ and database - `npm run verify:email` needs neither.
    patient nothing to act on.
 9. Point your uptime monitor at `/api/health`.
 
-Vercel deploys without extra configuration; `vercel.json` registers the cron. Middleware runs on the Edge; the
+Vercel deploys without extra configuration. `vercel.json` registers the cron
+daily, which is the most the Hobby plan allows; see
+[Scheduled tasks](#scheduled-tasks) for a tighter schedule. Middleware runs on the Edge; the
 rest is Node (Mongoose requires it, which is why it is in
 `serverExternalPackages`).
 
