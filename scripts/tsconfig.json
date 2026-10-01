@@ -1,0 +1,11 @@
+{
+  "//": "Lets maintenance and verification scripts import modules guarded by `server-only`, which throws outside Next's bundler. Only scripts use this; the app build keeps the real guard.",
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["src/*"],
+      "server-only": ["tests/stubs/server-only.ts"]
+    }
+  }
+}
