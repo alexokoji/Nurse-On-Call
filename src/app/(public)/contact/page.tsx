@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Clock, Mail, MapPin, MessageSquare, Phone } from 'lucide-react';
 import { ContactForm } from './contact-form';
+import { getContactDetails } from '@/lib/settings/contact';
 
 export const metadata: Metadata = {
   title: 'Contact Us',
@@ -10,36 +11,51 @@ export const metadata: Metadata = {
   alternates: { canonical: '/contact' },
 };
 
-const CHANNELS = [
-  {
-    icon: Phone,
-    label: 'Call us',
-    value: '0800 123 4567',
-    href: 'tel:08001234567',
-    note: 'Someone answers, any hour.',
-  },
-  {
-    icon: Mail,
-    label: 'Email us',
-    value: 'care@nurseoncall.ng',
-    href: 'mailto:care@nurseoncall.ng',
-    note: 'We reply within one working day.',
-  },
-  {
-    icon: MapPin,
-    label: 'Visit the clinic',
-    value: '14 Aba Road, GRA Phase 2, Port Harcourt',
-    note: 'Rivers State, Nigeria.',
-  },
-  {
-    icon: Clock,
-    label: 'Opening hours',
-    value: 'Monday – Sunday, 24 hours',
-    note: 'Home visits 08:00 – 18:00 daily.',
-  },
-];
+/**
+ * Built per request from Settings → General rather than held in a module
+ * constant, so changing the phone number in the admin changes it here.
+ * Channels with nothing configured are dropped instead of shown empty.
+ */
+function channels(contact: Awaited<ReturnType<typeof getContactDetails>>) {
+  return [
+    contact.phone && {
+      icon: Phone,
+      label: 'Call us',
+      value: contact.phone,
+      href: contact.phoneHref,
+      note: 'Someone answers, any hour.',
+    },
+    contact.email && {
+      icon: Mail,
+      label: 'Email us',
+      value: contact.email,
+      href: contact.emailHref,
+      note: 'We reply within one working day.',
+    },
+    contact.address && {
+      icon: MapPin,
+      label: 'Visit the clinic',
+      value: contact.address,
+      note: undefined,
+    },
+    {
+      icon: Clock,
+      label: 'Opening hours',
+      value: 'Monday – Sunday, 24 hours',
+      note: 'Home visits 08:00 – 18:00 daily.',
+    },
+  ].filter(Boolean) as {
+    icon: typeof Phone;
+    label: string;
+    value: string;
+    href?: string;
+    note?: string;
+  }[];
+}
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const contact = await getContactDetails();
+  const CHANNELS = channels(contact);
   return (
     <>
       <section className="border-b border-border bg-gradient-to-b from-brand-50/60 to-background">

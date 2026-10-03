@@ -27,11 +27,23 @@ export interface BookingSettings {
   allowSameDayBooking: boolean;
 }
 
+export interface BankTransferSettings {
+  enabled: boolean;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  /** Shown to the patient alongside the account details. */
+  instructions: string;
+  /** How long the slot is held while the transfer is made and confirmed. */
+  holdHours: number;
+}
+
 export interface PaymentSettings {
   defaultProvider: 'paystack' | 'flutterwave' | 'korapay';
   currency: string;
   enabledProviders: ('paystack' | 'flutterwave' | 'korapay')[];
   allowPayAtVisit: boolean;
+  bankTransfer: BankTransferSettings;
 }
 
 export interface NotificationSettings {
@@ -93,6 +105,17 @@ export const DEFAULT_SETTINGS: SettingsMap = {
     currency: 'NGN',
     enabledProviders: ['paystack', 'flutterwave', 'korapay'],
     allowPayAtVisit: false,
+    /* Off until an administrator fills in the account, since an empty account
+       number offered at checkout is worse than no option at all. */
+    bankTransfer: {
+      enabled: false,
+      bankName: '',
+      accountName: '',
+      accountNumber: '',
+      instructions:
+        'Use your booking reference as the transfer narration so we can match your payment.',
+      holdHours: 24,
+    },
   },
   notifications: {
     emailEnabled: true,

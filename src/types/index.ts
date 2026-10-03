@@ -59,7 +59,20 @@ export const PAYMENT_STATUSES = [
 ] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
-export const PAYMENT_PROVIDERS = ['paystack', 'flutterwave', 'korapay', 'manual'] as const;
+/**
+ * `bank_transfer` is a patient-initiated transfer the organisation confirms by
+ * hand; `manual` is a payment an administrator records after the fact (cash at
+ * the visit, a POS terminal, a phone booking). They are kept apart because the
+ * first needs a pending state a patient can see and chase, and the second is
+ * settled the moment it is entered.
+ */
+export const PAYMENT_PROVIDERS = [
+  'paystack',
+  'flutterwave',
+  'korapay',
+  'bank_transfer',
+  'manual',
+] as const;
 export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number];
 
 export const REFUND_STATUSES = [

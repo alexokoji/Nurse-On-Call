@@ -111,6 +111,15 @@ function buildPayload(group: SettingGroup, formData: FormData): Record<string, u
         currency: value('currency') ?? 'NGN',
         enabledProviders: formData.getAll('enabledProviders').map(String),
         allowPayAtVisit: checked('allowPayAtVisit'),
+        bankTransfer: {
+          enabled: checked('bankTransferEnabled'),
+          bankName: value('bankName') ?? '',
+          accountName: value('accountName') ?? '',
+          // Spaces and dashes are natural to type and never part of a NUBAN.
+          accountNumber: String(value('accountNumber') ?? '').replace(/[\s-]/g, ''),
+          instructions: value('transferInstructions') ?? '',
+          holdHours: value('transferHoldHours') ?? 24,
+        },
       };
 
     case 'notifications':

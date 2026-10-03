@@ -19,6 +19,7 @@ import { getSettings } from '@/lib/settings';
 import { formatNaira, formatTimeLabel } from '@/lib/utils';
 import { LABELS, type LocationType } from '@/types';
 import { AppointmentActions } from './appointment-actions';
+import { pendingBankTransfer, getBankTransferOffer } from '@/lib/payments/bank-transfer';
 
 export const metadata: Metadata = { title: 'Appointment' };
 
@@ -38,6 +39,11 @@ export default async function AppointmentDetailPage({
   const canCancel = ['pending_payment', 'confirmed'].includes(booking.status);
   const canReschedule = ['pending_payment', 'confirmed'].includes(booking.status);
   const canPay = booking.status === 'pending_payment' && !booking.isPaid;
+
+  /* A patient who started a transfer and closed the tab needs the account
+     details again — they are the whole instruction set for paying. */
+  const awaitingTransfer = canPay ? await pendingBankTransfer(id) : null;
+  const transferOffer = awaitingTransfer ? await getBankTransferOffer() : null;
   const canReview = booking.status === 'completed' && !booking.review;
 
   return (
@@ -189,6 +195,44 @@ export default async function AppointmentDetailPage({
             <CreditCard className="size-3.5" aria-hidden />
             {booking.isPaid ? 'Paid in full' : 'Payment outstanding'}
           </p>
+
+          {awaitingTransfer && transferOffer?.available && (
+            <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">Waiting for your transfer</p>
+              <dl className="mt-3 space-y-1.5 text-xs">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-amber-900/70">Bank</dt>
+                  <dd className="font-medium text-amber-900">{transferOffer.bankName}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-amber-900/70">Account name</dt>
+                  <dd className="text-right font-medium text-amber-900">
+                    {transferOffer.accountName}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-amber-900/70">Account number</dt>
+                  <dd className="font-mono font-medium tracking-wide text-amber-900">
+                    {transferOffer.accountNumber}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-amber-900/70">Narration</dt>
+                  <dd className="font-mono font-medium text-amber-900">{booking.reference}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-amber-900/70">Amount</dt>
+                  <dd className="font-medium text-amber-900">
+                    {formatNaira(booking.totalKobo)}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-3 text-xs text-amber-900/80">
+                We confirm your appointment as soon as the transfer reaches us. Quote the narration
+                exactly so we can match it.
+              </p>
+            </div>
+          )}
 
           {booking.invoiceNumber && (
             <Button asChild variant="outline" className="mt-5 w-full">

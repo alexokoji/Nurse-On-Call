@@ -19,6 +19,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { EmptyState, TableSkeleton, CardSkeleton } from '@/components/ui/feedback';
 import { requireAdmin } from '@/lib/auth/guards';
 import { userCan } from '@/lib/auth/current-user';
+import { TransferDecision } from './transfer-decision';
 import { getAdminPayments, getPaymentStats } from '@/lib/queries/admin';
 import { formatNaira } from '@/lib/utils';
 import { PAYMENT_STATUSES, LABELS } from '@/types';
@@ -67,6 +68,7 @@ export default async function AdminPaymentsPage({
               { value: 'paystack', label: 'Paystack' },
               { value: 'flutterwave', label: 'Flutterwave' },
               { value: 'korapay', label: 'Korapay' },
+              { value: 'bank_transfer', label: 'Bank transfer' },
               { value: 'manual', label: 'Manual / offline' },
             ],
           },
@@ -129,6 +131,12 @@ async function Stats() {
 }
 
 async function PaymentsTable({ params }: { params: SearchParams }) {
+  /* Resolved here rather than passed down: this component is rendered inside
+     its own Suspense boundary, so it cannot take the page's user as a prop
+     without blocking the shell on this query. */
+  const user = await requireAdmin();
+  const canSettle = userCan(user, 'payments.refund');
+
   const result = await getAdminPayments({
     q: params.q,
     status: params.status,
@@ -163,6 +171,7 @@ async function PaymentsTable({ params }: { params: SearchParams }) {
             <TableHead>Date</TableHead>
             <TableHead className="text-right">Amount</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead className="text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
 
@@ -233,6 +242,25 @@ async function PaymentsTable({ params }: { params: SearchParams }) {
 
               <TableCell>
                 <StatusBadge kind="payment" status={payment.status} />
+              </TableCell>
+
+              <TableCell className="text-right">
+                {/* Only a transfer still waiting on a human decision gets
+                    buttons. Everything else has already been settled by a
+                    gateway or by hand. */}
+                {payment.provider === 'bank_transfer' &&
+                payment.status === 'pending' &&
+                canSettle ? (
+                  <TransferDecision
+                    paymentId={payment.id}
+                    amountKobo={payment.amountKobo}
+                    patientName={payment.patientName}
+                    bookingReference={payment.bookingReference}
+                    narration={payment.narration ?? undefined}
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
               </TableCell>
             </TableRow>
           ))}

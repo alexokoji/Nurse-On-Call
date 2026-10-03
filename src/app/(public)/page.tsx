@@ -27,6 +27,7 @@ import {
   getTestimonials,
   getPublicTeam,
 } from '@/lib/queries/public';
+import { getContactDetails, type ContactDetails } from '@/lib/settings/contact';
 
 export const metadata: Metadata = {
   title: 'Quality Healthcare, When You Need It',
@@ -37,6 +38,7 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
+  const contact = await getContactDetails();
   const [services, categories, stats, testimonials, team] = await Promise.all([
     getFeaturedServices(5),
     getServiceCategories(),
@@ -54,7 +56,7 @@ export default async function HomePage() {
       <HowItWorks />
       {team.length > 0 && <TeamStrip team={team} />}
       {testimonials.length > 0 && <Testimonials testimonials={testimonials} stats={stats} />}
-      <FinalCta />
+      <FinalCta contact={contact} />
     </>
   );
 }
@@ -556,7 +558,7 @@ function StatTile({
 
 /* ── Final CTA ────────────────────────────────────────────────────── */
 
-function FinalCta() {
+function FinalCta({ contact }: { contact: ContactDetails }) {
   return (
     <section className="pb-16 md:pb-24">
       <div className="container">
@@ -584,9 +586,9 @@ function FinalCta() {
                 variant="outline"
                 className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
               >
-                <a href="tel:08001234567">
+                <a href={contact.phoneHref}>
                   <Phone className="size-4" />
-                  0800 123 4567
+                  {contact.phone}
                 </a>
               </Button>
             </div>

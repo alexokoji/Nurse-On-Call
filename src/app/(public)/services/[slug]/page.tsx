@@ -24,6 +24,7 @@ import {
   getPublishedServices,
   getServiceReviews,
 } from '@/lib/queries/public';
+import { getContactDetails } from '@/lib/settings/contact';
 
 export async function generateMetadata({
   params,
@@ -58,9 +59,10 @@ export default async function ServiceDetailPage({
 
   if (!service) notFound();
 
-  const [reviews, allServices] = await Promise.all([
+  const [reviews, allServices, contact] = await Promise.all([
     getServiceReviews(service.id, 5),
     getPublishedServices(),
+    getContactDetails(),
   ]);
 
   const related = allServices
@@ -367,7 +369,7 @@ export default async function ServiceDetailPage({
                   that means booking nothing today.
                 </p>
                 <Button asChild variant="accent" className="mt-5 w-full">
-                  <a href="tel:08001234567">Call 0800 123 4567</a>
+                  <a href={contact.phoneHref}>Call {contact.phone}</a>
                 </Button>
               </div>
             </aside>

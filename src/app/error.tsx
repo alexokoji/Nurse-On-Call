@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DEFAULT_SETTINGS } from '@/lib/settings/defaults';
 
 /**
  * Root error boundary.
@@ -34,9 +35,15 @@ export default function GlobalError({
           Something went wrong
         </h1>
 
+        {/* The code-level default, not the configured number.
+
+            This boundary renders when something has already failed — often the
+            database itself — so it must not depend on a settings read. Every
+            other page shows the number from Settings → General. */}
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           We hit an unexpected problem. Nothing you were doing has been lost — try again, and if it
-          keeps happening, call us on 0800 123 4567 and we will sort it out directly.
+          keeps happening, call us on {DEFAULT_SETTINGS.general.phone} and we will sort it out
+          directly.
         </p>
 
         {error.digest && (

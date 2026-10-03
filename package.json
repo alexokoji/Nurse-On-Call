@@ -19,7 +19,8 @@
     "verify:reminders": "tsx --tsconfig scripts/tsconfig.json scripts/verify-reminders.ts",
     "verify:promotions": "tsx --tsconfig scripts/tsconfig.json scripts/verify-promotions.ts",
     "verify:bootstrap": "tsx --tsconfig scripts/tsconfig.json scripts/verify-bootstrap.ts",
-    "verify": "npm run smoke && npm run verify:email && npm run verify:uploads && npm run verify:reminders && npm run verify:promotions"
+    "verify:transfer": "tsx --tsconfig scripts/tsconfig.json scripts/verify-bank-transfer.ts",
+    "verify": "npm run smoke && npm run verify:email && npm run verify:uploads && npm run verify:reminders && npm run verify:promotions && npm run verify:transfer"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

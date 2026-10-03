@@ -40,14 +40,32 @@ const NAV: NavItem[] = [
   { label: 'Contact', href: '/contact' },
 ];
 
+export interface HeaderContact {
+  phone: string;
+  phoneHref: string;
+  email: string;
+  emailHref: string;
+  /** Town and state, derived from the configured address. May be empty. */
+  locality?: string;
+}
+
 export function SiteHeader({
   session,
   branding,
+  contact,
 }: {
   /** Present when a visitor is signed in, so the CTA becomes a dashboard link. */
   session?: { name: string; role: string } | null;
   /** Uploaded logo and name from Settings → General. */
   branding?: { logo?: string; organisationName?: string };
+  /**
+   * Contact details from Settings → General, resolved in the layout.
+   *
+   * Passed in rather than read here because this is a client component: it
+   * needs `usePathname` for the active nav state, so it cannot touch the
+   * database itself.
+   */
+  contact: HeaderContact;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -78,16 +96,16 @@ export function SiteHeader({
       <div className="hidden bg-navy-800 text-white lg:block">
         <div className="container flex h-9 items-center justify-between text-xs">
           <div className="flex items-center gap-5">
-            <span className="flex items-center gap-1.5">
-              <Phone className="size-3" aria-hidden /> 0800 123 4567
-            </span>
+            <a href={contact.phoneHref} className="flex items-center gap-1.5 hover:text-white">
+              <Phone className="size-3" aria-hidden /> {contact.phone}
+            </a>
             <span className="text-white/60">24/7 support</span>
           </div>
           <div className="flex items-center gap-5 text-white/70">
-            <a href="mailto:care@nurseoncall.ng" className="hover:text-white">
-              care@nurseoncall.ng
+            <a href={contact.emailHref} className="hover:text-white">
+              {contact.email}
             </a>
-            <span>Port Harcourt, Rivers State</span>
+            {contact.locality ? <span>{contact.locality}</span> : null}
           </div>
         </div>
       </div>
@@ -239,10 +257,10 @@ export function SiteHeader({
                 </Link>
               </Button>
               <a
-                href="tel:08001234567"
+                href={contact.phoneHref}
                 className="mt-2 flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground"
               >
-                <Phone className="size-4" aria-hidden /> 0800 123 4567
+                <Phone className="size-4" aria-hidden /> {contact.phone}
               </a>
             </div>
           </nav>

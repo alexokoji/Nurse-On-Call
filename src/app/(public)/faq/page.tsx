@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { getSettings } from '@/lib/settings';
+import { getContactDetails } from '@/lib/settings/contact';
 
 export const metadata: Metadata = {
   title: 'Frequently Asked Questions',
@@ -17,6 +18,7 @@ interface FaqGroup {
 }
 
 export default async function FaqPage() {
+  const contact = await getContactDetails();
   const booking = await getSettings('booking');
 
   const groups: FaqGroup[] = [
@@ -181,7 +183,7 @@ export default async function FaqPage() {
             Frequently asked questions
           </h1>
           <p className="mt-5 max-w-2xl text-base text-muted-foreground">
-            If your question isn&apos;t here, call us on 0800 123 4567 — we would rather answer
+            If your question isn&apos;t here, call us on {contact.phone} — we would rather answer
             it than have you guess.
           </p>
         </div>
@@ -226,7 +228,7 @@ export default async function FaqPage() {
                 <Link href="/contact">Send us a message</Link>
               </Button>
               <Button asChild variant="outline">
-                <a href="tel:08001234567">Call 0800 123 4567</a>
+                <a href={contact.phoneHref}>Call {contact.phone}</a>
               </Button>
             </div>
           </div>

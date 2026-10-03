@@ -769,6 +769,10 @@ export async function getAdminPayments(
       paidAt: doc.paidAt ? doc.paidAt.toISOString() : null,
       createdAt: doc.createdAt.toISOString(),
       webhookVerified: Boolean(doc.webhookVerifiedAt),
+      /* For a bank transfer, what the patient was told to quote — which is
+         what an administrator looks for on the bank statement. */
+      narration:
+        typeof doc.metadata?.narration === 'string' ? (doc.metadata.narration as string) : null,
     };
   });
 

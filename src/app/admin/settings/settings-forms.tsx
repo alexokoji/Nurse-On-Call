@@ -315,6 +315,78 @@ export function SettingsForms({
                 description="Lets a booking be confirmed before payment, settled manually afterwards."
                 defaultChecked={payments.allowPayAtVisit}
               />
+
+              <div className="rounded-xl border border-border p-4">
+                <ToggleRow
+                  name="bankTransferEnabled"
+                  label="Offer bank transfer"
+                  description="Patients see your account details at checkout and the slot is held until you confirm the transfer."
+                  defaultChecked={payments.bankTransfer.enabled}
+                />
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <Field label="Bank name" error={errors?.bankName?.[0]}>
+                    <Input
+                      name="bankName"
+                      defaultValue={payments.bankTransfer.bankName}
+                      placeholder="Guaranty Trust Bank"
+                      maxLength={120}
+                    />
+                  </Field>
+
+                  <Field label="Account name" error={errors?.accountName?.[0]}>
+                    <Input
+                      name="accountName"
+                      defaultValue={payments.bankTransfer.accountName}
+                      placeholder="NurseOnCall Limited"
+                      maxLength={120}
+                    />
+                  </Field>
+
+                  <Field
+                    label="Account number"
+                    description="10 digits"
+                    error={errors?.accountNumber?.[0]}
+                  >
+                    <Input
+                      name="accountNumber"
+                      defaultValue={payments.bankTransfer.accountNumber}
+                      placeholder="0123456789"
+                      inputMode="numeric"
+                      maxLength={20}
+                    />
+                  </Field>
+
+                  <Field
+                    label="Hold the slot for"
+                    description="Hours to wait for the transfer before the slot is released"
+                    error={errors?.holdHours?.[0]}
+                  >
+                    <Input
+                      name="transferHoldHours"
+                      type="number"
+                      min={1}
+                      max={168}
+                      defaultValue={payments.bankTransfer.holdHours}
+                    />
+                  </Field>
+                </div>
+
+                <div className="mt-4">
+                  <Field
+                    label="Instructions for the patient"
+                    description="Shown with the account details. The booking reference is added automatically."
+                    error={errors?.instructions?.[0]}
+                  >
+                    <Textarea
+                      name="transferInstructions"
+                      rows={2}
+                      defaultValue={payments.bankTransfer.instructions}
+                      maxLength={600}
+                    />
+                  </Field>
+                </div>
+              </div>
             </>
           )}
         </SettingsSection>

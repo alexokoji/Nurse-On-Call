@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Mail, MapPin, Phone, Clock } from 'lucide-react';
 import { Logo } from './logo';
+import { getContactDetails } from '@/lib/settings/contact';
 
 const QUICK_LINKS = [
   { label: 'Home', href: '/' },
@@ -26,6 +27,11 @@ export async function SiteFooter({
   branding?: { logo?: string; organisationName?: string };
 }) {
   const year = new Date().getFullYear();
+
+  /* Read here rather than taken as a prop: this is a server component, so it
+     can reach Settings → General itself, and `getSettings` is request-cached
+     so the header's copy costs no second query. */
+  const contact = await getContactDetails();
 
   return (
     <footer className="mt-auto bg-navy-900 text-white/70">
@@ -63,22 +69,28 @@ export async function SiteFooter({
           <div>
             <h3 className="text-sm font-semibold text-white">Contact Us</h3>
             <ul className="mt-4 space-y-3 text-sm">
-              <li className="flex gap-2.5">
-                <Phone className="mt-0.5 size-4 shrink-0 text-crimson-400" aria-hidden />
-                <a href="tel:08001234567" className="hover:text-white">
-                  0800 123 4567
-                </a>
-              </li>
-              <li className="flex gap-2.5">
-                <Mail className="mt-0.5 size-4 shrink-0 text-crimson-400" aria-hidden />
-                <a href="mailto:care@nurseoncall.ng" className="hover:text-white">
-                  care@nurseoncall.ng
-                </a>
-              </li>
-              <li className="flex gap-2.5">
-                <MapPin className="mt-0.5 size-4 shrink-0 text-crimson-400" aria-hidden />
-                <span>14 Aba Road, GRA Phase 2, Port Harcourt, Rivers State</span>
-              </li>
+              {contact.phone ? (
+                <li className="flex gap-2.5">
+                  <Phone className="mt-0.5 size-4 shrink-0 text-crimson-400" aria-hidden />
+                  <a href={contact.phoneHref} className="hover:text-white">
+                    {contact.phone}
+                  </a>
+                </li>
+              ) : null}
+              {contact.email ? (
+                <li className="flex gap-2.5">
+                  <Mail className="mt-0.5 size-4 shrink-0 text-crimson-400" aria-hidden />
+                  <a href={contact.emailHref} className="hover:text-white">
+                    {contact.email}
+                  </a>
+                </li>
+              ) : null}
+              {contact.address ? (
+                <li className="flex gap-2.5">
+                  <MapPin className="mt-0.5 size-4 shrink-0 text-crimson-400" aria-hidden />
+                  <span>{contact.address}</span>
+                </li>
+              ) : null}
               <li className="flex gap-2.5">
                 <Clock className="mt-0.5 size-4 shrink-0 text-crimson-400" aria-hidden />
                 <span>Mon – Sun, 24/7</span>
@@ -88,7 +100,9 @@ export async function SiteFooter({
         </div>
 
         <div className="mt-12 flex flex-col gap-3 border-t border-white/10 pt-6 text-xs sm:flex-row sm:items-center sm:justify-between">
-          <p>© {year} NurseOnCall. All rights reserved.</p>
+          <p>
+            © {year} {contact.organisationName}. All rights reserved.
+          </p>
           <div className="flex flex-wrap gap-x-5 gap-y-2">
             <Link href="/privacy" className="hover:text-white">
               Privacy Policy

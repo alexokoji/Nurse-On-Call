@@ -73,6 +73,21 @@ export function displayPhone(input: string) {
   return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`.trim();
 }
 
+/**
+ * A `tel:` href for a phone number as an administrator typed it.
+ *
+ * Dialling must not depend on their formatting, so the number is normalised
+ * rather than having its spaces stripped: "0803 123 4567", "+234 803 123 4567"
+ * and "803 123 4567" all produce the same dialable href. A short number —
+ * "999", an internal extension — is left as digits, since normalising it to a
+ * Nigerian mobile would be wrong.
+ */
+export function telHref(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 7) return `tel:${digits}`;
+  return `tel:${normalisePhone(phone)}`;
+}
+
 /** Build a querystring, dropping empty values. */
 export function buildQuery(params: Record<string, string | number | undefined | null>) {
   const search = new URLSearchParams();

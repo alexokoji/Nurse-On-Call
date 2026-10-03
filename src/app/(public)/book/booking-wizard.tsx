@@ -12,8 +12,10 @@ import {
   CalendarDays,
   Check,
   Clock,
+  Copy,
   CreditCard,
   Home,
+  Landmark,
   Video,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -107,6 +109,7 @@ export function BookingWizard({
   prefill,
   cancellationPolicy,
   maximumAdvanceDays,
+  bankTransferAvailable,
 }: {
   services: PublicService[];
   preselectedSlug?: string;
@@ -114,6 +117,8 @@ export function BookingWizard({
   prefill: BookingPrefill | null;
   cancellationPolicy: string;
   maximumAdvanceDays: number;
+  /** Settings → Payments, resolved on the server. */
+  bankTransferAvailable: boolean;
 }) {
   const router = useRouter();
 
@@ -122,6 +127,7 @@ export function BookingWizard({
     : null;
 
   const [step, setStep] = useState<Step>(preselected ? 'location' : 'service');
+  const [transfer, setTransfer] = useState<BankTransferInstructions | null>(null);
   const [service, setService] = useState<PublicService | null>(preselected);
   const [locationType, setLocationType] = useState<LocationType | null>(null);
   const [dateKey, setDateKey] = useState<string | null>(null);
@@ -313,6 +319,37 @@ export function BookingWizard({
     }
   };
 
+  /* Bank transfer does not leave the site: the patient is shown the account
+     details and the appointment waits, unpaid, for someone to confirm the
+     money arrived. */
+  const startBankTransfer = async () => {
+    if (!result) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/payments/bank-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: result.bookingId }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setError(payload.error ?? 'We could not set up a bank transfer.');
+        return;
+      }
+
+      setTransfer(payload.data as BankTransferInstructions);
+    } catch {
+      setError('We could not reach the server. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   /* ── Render ─────────────────────────────────────────────────────── */
 
   return (
@@ -419,6 +456,9 @@ export function BookingWizard({
               submitting={submitting}
               onPay={startPayment}
               bookingId={result.bookingId}
+              bankTransferAvailable={bankTransferAvailable}
+              onBankTransfer={startBankTransfer}
+              transfer={transfer}
             />
           )}
 
@@ -1024,19 +1064,46 @@ function Row({ label, value }: { label: string; value: string }) {
 
 /* ── Step 7: payment ──────────────────────────────────────────────── */
 
+export interface BankTransferInstructions {
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  instructions: string;
+  narration: string;
+  holdExpiresAt: string;
+}
+
 function StepPayment({
   reference,
   amountKobo,
   submitting,
   onPay,
   bookingId,
+  bankTransferAvailable,
+  onBankTransfer,
+  transfer,
 }: {
   reference: string;
   amountKobo: number;
   submitting: boolean;
   onPay: () => void;
   bookingId: string;
+  bankTransferAvailable: boolean;
+  onBankTransfer: () => void;
+  transfer: BankTransferInstructions | null;
 }) {
+  /* Once the details are on screen the card button would be a distraction:
+     the patient's next move is at their bank, not here. */
+  if (transfer) {
+    return (
+      <TransferInstructions
+        transfer={transfer}
+        amountKobo={amountKobo}
+        bookingId={bookingId}
+      />
+    );
+  }
+
   return (
     <div>
       <StepHeading
@@ -1068,6 +1135,33 @@ function StepPayment({
         card details.
       </p>
 
+      {bankTransferAvailable && (
+        <>
+          <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            or
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <Button
+            type="button"
+            size="lg"
+            variant="outline"
+            className="w-full"
+            onClick={onBankTransfer}
+            loading={submitting}
+          >
+            <Landmark className="size-4" />
+            Pay by bank transfer
+          </Button>
+
+          <p className="mt-3 text-xs text-muted-foreground">
+            We&apos;ll show you the account details. Your appointment is confirmed once we see the
+            transfer, which is usually the same day.
+          </p>
+        </>
+      )}
+
       <p className="mt-5 text-center text-sm text-muted-foreground">
         Prefer to pay later?{' '}
         <Link href={`/patient/appointments/${bookingId}`} className="font-medium text-primary hover:underline">
@@ -1075,6 +1169,123 @@ function StepPayment({
         </Link>
         .
       </p>
+    </div>
+  );
+}
+
+/**
+ * The account details, after the patient chooses a transfer.
+ *
+ * The account number and the narration each get a copy button: both have to be
+ * typed into a banking app exactly, and a mistyped narration is what turns a
+ * payment into an unmatched one someone has to chase.
+ */
+function TransferInstructions({
+  transfer,
+  amountKobo,
+  bookingId,
+}: {
+  transfer: BankTransferInstructions;
+  amountKobo: number;
+  bookingId: string;
+}) {
+  const holdUntil = new Date(transfer.holdExpiresAt);
+
+  return (
+    <div>
+      <StepHeading
+        title="Transfer to complete your booking"
+        description="Your appointment is held while the transfer reaches us."
+      />
+
+      <div className="mt-6 rounded-xl border border-border bg-secondary/50 p-6 text-center">
+        <p className="text-sm text-muted-foreground">Amount to transfer</p>
+        <p className="mt-1 font-display text-3xl font-bold text-navy-800">
+          {formatNaira(amountKobo)}
+        </p>
+      </div>
+
+      <dl className="mt-6 divide-y divide-border rounded-xl border border-border">
+        <DetailRow label="Bank" value={transfer.bankName} />
+        <DetailRow label="Account name" value={transfer.accountName} />
+        <DetailRow label="Account number" value={transfer.accountNumber} copyable />
+        <DetailRow label="Narration" value={transfer.narration} copyable />
+      </dl>
+
+      {transfer.instructions && (
+        <p className="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          {transfer.instructions}
+        </p>
+      )}
+
+      <p className="mt-4 text-sm text-muted-foreground">
+        We hold this slot until{' '}
+        <span className="font-medium text-navy-800">
+          {holdUntil.toLocaleString('en-NG', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+        . You&apos;ll get an email as soon as we confirm the payment.
+      </p>
+
+      <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+        <Button asChild size="lg">
+          <Link href={`/patient/appointments/${bookingId}`}>View this appointment</Link>
+        </Button>
+        <Button asChild size="lg" variant="outline">
+          <Link href="/patient/dashboard">Go to dashboard</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  copyable = false,
+}: {
+  label: string;
+  value: string;
+  copyable?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* Clipboard access can be refused; the value is on screen to read. */
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="flex items-center gap-2 text-sm font-medium text-navy-800">
+        <span className={copyable ? 'font-mono tracking-wide' : undefined}>{value}</span>
+        {copyable && (
+          <button
+            type="button"
+            onClick={copy}
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-navy-800"
+            aria-label={copied ? `${label} copied` : `Copy ${label.toLowerCase()}`}
+          >
+            {copied ? (
+              <Check className="size-3.5 text-emerald-600" aria-hidden />
+            ) : (
+              <Copy className="size-3.5" aria-hidden />
+            )}
+          </button>
+        )}
+      </dd>
     </div>
   );
 }

@@ -250,11 +250,47 @@ export const bookingSettingsSchema = z.object({
   allowSameDayBooking: z.boolean().default(true),
 });
 
+/**
+ * Bank transfer details.
+ *
+ * The fields are only required when the method is switched on: an
+ * administrator should be able to save a half-filled form while they go and
+ * find the account number, but must not be able to offer patients a transfer
+ * to nowhere. Nigerian NUBAN account numbers are exactly ten digits.
+ */
+export const bankTransferSettingsSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    bankName: z.string().trim().max(120).default(''),
+    accountName: z.string().trim().max(120).default(''),
+    accountNumber: z
+      .string()
+      .trim()
+      .max(20)
+      .default('')
+      .refine((value) => value === '' || /^\d{10}$/.test(value), 'Enter the 10-digit account number'),
+    instructions: z.string().trim().max(600).default(''),
+    holdHours: z.coerce.number().int().min(1).max(168).default(24),
+  })
+  .refine((value) => !value.enabled || value.bankName.length > 0, {
+    message: 'Add the bank name before enabling bank transfer',
+    path: ['bankName'],
+  })
+  .refine((value) => !value.enabled || value.accountName.length > 0, {
+    message: 'Add the account name before enabling bank transfer',
+    path: ['accountName'],
+  })
+  .refine((value) => !value.enabled || /^\d{10}$/.test(value.accountNumber), {
+    message: 'Add the 10-digit account number before enabling bank transfer',
+    path: ['accountNumber'],
+  });
+
 export const paymentSettingsSchema = z.object({
   defaultProvider: z.enum(['paystack', 'flutterwave', 'korapay']),
   currency: z.string().trim().length(3).default('NGN'),
   enabledProviders: z.array(z.enum(['paystack', 'flutterwave', 'korapay'])).default(['paystack']),
   allowPayAtVisit: z.boolean().default(false),
+  bankTransfer: bankTransferSettingsSchema,
 });
 
 export const notificationSettingsSchema = z.object({

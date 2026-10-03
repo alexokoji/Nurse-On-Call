@@ -265,6 +265,7 @@ Change `SEED_ADMIN_PASSWORD` in `.env.local` to use a different one.
 | `npm run verify:uploads`                                   | Upload route guards: role, folder, size, file signature                  |
 | `npm run verify:reminders`                                 | Proves a reminder sends exactly once                                     |
 | `npm run verify:promotions`                                | 25 concurrent claims against a limit of 5                                |
+| `npm run verify:transfer`                                  | Bank transfer: availability, idempotency, confirmation                   |
 | `npm run verify`                                           | Everything above, in order                                               |
 | `npx tsx scripts/dev-inspect.ts slots home-nursing home 3` | Print real availability for a date                                       |
 
@@ -317,6 +318,42 @@ taken and settled with **Record payment** on the appointment page, which writes
 a real `manual` transaction (bank transfer, cash or POS) with the administrator
 who took it recorded in the audit log. That is a genuine business capability
 for a Nigerian provider, not a simulated payment.
+
+---
+
+### Bank transfer
+
+Set up in **Settings → Payments**: bank name, account name, 10-digit account
+number, instructions, and how many hours to hold the slot. The method stays off
+until all three account fields are filled, because offering a patient a
+transfer to an incomplete account is worse than offering nothing.
+
+It is the one method with no gateway to ask, which shapes the design:
+
+- **A transfer never confirms its own appointment.** Choosing it creates a
+  `pending` payment and nothing more. Only an administrator confirming receipt
+  marks the booking paid, so a patient cannot confirm a booking by claiming to
+  have paid.
+- **The hold is hours, not minutes.** A card payment resolves in seconds, so
+  the usual window would release the slot while the patient was still at their
+  bank. `holdHours` replaces it for transfers.
+- **Starting twice reuses the same payment.** A reload or a double tap would
+  otherwise leave two pending payments for one booking and no way to tell which
+  to confirm.
+- **The booking reference is the narration**, which is what makes an arriving
+  transfer matchable to an appointment. It is shown with a copy button, and
+  repeated on the appointment page for a patient who closed the tab.
+
+Administrators settle them in **Payments**, filtered by Bank transfer. The
+confirm dialog states the amount, the patient and the narration to look for on
+the statement. Declining asks for a reason, which is sent to the patient, and
+releases the slot — a transfer that lands later can still be confirmed, since
+the alternative is an administrator with no way to fix it. Both are audited and
+record who decided.
+
+`bank_transfer` is deliberately separate from `manual`: the first is patient
+initiated and waits for a human, the second is an administrator recording cash
+or a POS payment after the fact, settled immediately.
 
 ---
 
@@ -542,6 +579,23 @@ timezone and DST bugs entirely. `availability.ts` fetches the five inputs
 (service, working hours, overrides, blocked time, live bookings) and feeds them
 in. The same function serves the public slot picker and the final pre-write
 check, so what a patient sees and what the server enforces cannot diverge.
+
+### Settings are read, never written into the markup
+
+Contact details on the public site come from Settings → General through
+`lib/settings/contact.ts`, not from constants in each page.
+
+They were hardcoded in the header, footer, contact page, FAQ, homepage and
+service pages, which meant the General settings screen saved values that
+changed nothing: the admin looked like it worked while the site kept showing
+the old number. `getSettings` is wrapped in React's `cache()`, so the several
+components that read it in one render share a single query, and the server
+action already calls `revalidatePath('/', 'layout')` so a save takes effect
+immediately.
+
+The one deliberate exception is `app/error.tsx`, which uses the code-level
+default: it renders when something has already failed, often the database
+itself, so it must not depend on a settings read.
 
 ### Money is stored in kobo
 

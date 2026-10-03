@@ -4,7 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { apiRequirePermission, AuthError } from '@/lib/auth/guards';
 import { requestRefund, decideRefund, PaymentError } from '@/lib/payments/service';
 import { refundRequestSchema, refundDecisionSchema } from '@/lib/validations/admin';
-import { toKobo } from '@/lib/utils';
+import { z } from 'zod';
+import { confirmBankTransfer, declineBankTransfer } from '@/lib/payments/bank-transfer';
+import { recordAudit } from '@/lib/audit';
+import { formatNaira, toKobo } from '@/lib/utils';
 import type { ActionResult } from '@/types';
 
 /** Refund actions. Requesting and approving are separate permissions on
@@ -80,5 +83,109 @@ export async function decideRefundAction(
     };
   } catch (error) {
     return toResult(error, 'We could not process that refund.');
+  }
+}
+
+/* ── Bank transfer confirmation ────────────────────────────────────────
+   A transfer has no gateway to ask, so a person vouches for it. These are
+   therefore the only actions that mark money as received on someone's word,
+   which is why both are permissioned, audited, and record the actor on the
+   payment itself.
+
+   `payments.refund` is the existing "handles money" permission, already
+   required to record a manual payment. Reusing it keeps the two offline
+   settlement paths behind one grant, and needs no change to roles already
+   stored in a live database. */
+
+export async function confirmBankTransferAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const user = await apiRequirePermission('payments.refund');
+
+    const parsed = z
+      .object({
+        paymentId: z.string().min(1),
+        note: z.string().trim().max(300).optional(),
+      })
+      .safeParse({
+        paymentId: formData.get('paymentId'),
+        note: formData.get('note') || undefined,
+      });
+
+    if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
+
+    const { booking, payment } = await confirmBankTransfer(
+      parsed.data.paymentId,
+      { id: user.id, name: user.name },
+      parsed.data.note,
+    );
+
+    await recordAudit({
+      actor: user,
+      action: 'payment.transfer.confirm',
+      entity: 'Payment',
+      entityId: String(payment._id),
+      summary:
+        `Bank transfer of ${formatNaira(payment.amountPaidKobo)} confirmed for ` +
+        `${booking.reference}`,
+      after: { note: parsed.data.note, bookingStatus: booking.status },
+    });
+
+    revalidatePath('/admin/payments');
+    revalidatePath('/admin/appointments');
+    revalidatePath(`/admin/appointments/${String(booking._id)}`);
+    revalidatePath('/admin');
+
+    return { ok: true, message: 'Transfer confirmed and the appointment is booked.' };
+  } catch (error) {
+    return toResult(error, 'We could not confirm that transfer.');
+  }
+}
+
+export async function declineBankTransferAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const user = await apiRequirePermission('payments.refund');
+
+    const parsed = z
+      .object({
+        paymentId: z.string().min(1),
+        /* Required, unlike the confirmation note: this one is sent to the
+           patient, and "we could not confirm your payment" with no reason is
+           an invitation to a phone call. */
+        reason: z.string().trim().min(5).max(300),
+      })
+      .safeParse({
+        paymentId: formData.get('paymentId'),
+        reason: formData.get('reason'),
+      });
+
+    if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
+
+    const { booking, payment } = await declineBankTransfer(
+      parsed.data.paymentId,
+      { id: user.id, name: user.name },
+      parsed.data.reason,
+    );
+
+    await recordAudit({
+      actor: user,
+      action: 'payment.transfer.decline',
+      entity: 'Payment',
+      entityId: String(payment._id),
+      summary: `Bank transfer for ${booking.reference} could not be confirmed`,
+      after: { reason: parsed.data.reason },
+    });
+
+    revalidatePath('/admin/payments');
+    revalidatePath(`/admin/appointments/${String(booking._id)}`);
+
+    return { ok: true, message: 'Marked as not received. The patient has been told.' };
+  } catch (error) {
+    return toResult(error, 'We could not update that transfer.');
   }
 }

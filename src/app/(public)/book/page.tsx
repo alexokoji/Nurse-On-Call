@@ -9,6 +9,8 @@ import { PatientProfile } from '@/models';
 import { getPublishedServices } from '@/lib/queries/public';
 import { getSettings } from '@/lib/settings';
 import { EmptyState } from '@/components/ui/feedback';
+import { getContactDetails } from '@/lib/settings/contact';
+import { getBankTransferOffer } from '@/lib/payments/bank-transfer';
 
 export const metadata: Metadata = {
   title: 'Book a Service',
@@ -23,19 +25,22 @@ export default async function BookPage({
 }: {
   searchParams: Promise<{ service?: string }>;
 }) {
-  const [{ service: preselectedSlug }, user, services, bookingSettings] = await Promise.all([
-    searchParams,
-    getCurrentUser(),
-    getPublishedServices(),
-    getSettings('booking'),
-  ]);
+  const [{ service: preselectedSlug }, user, services, bookingSettings, contact, transferOffer] =
+    await Promise.all([
+      searchParams,
+      getCurrentUser(),
+      getPublishedServices(),
+      getSettings('booking'),
+      getContactDetails(),
+      getBankTransferOffer(),
+    ]);
 
   if (services.length === 0) {
     return (
       <div className="container py-20">
         <EmptyState
           title="Booking is temporarily unavailable"
-          description="Our service catalogue is being updated. Please call 0800 123 4567 and we'll book you in directly."
+          description={`Our service catalogue is being updated. Please call ${contact.phone} and we'll book you in directly.`}
           action={{ label: 'Contact us', href: '/contact' }}
         />
       </div>
@@ -82,6 +87,7 @@ export default async function BookPage({
             prefill={prefill}
             cancellationPolicy={bookingSettings.cancellationPolicy}
             maximumAdvanceDays={bookingSettings.maximumAdvanceDays}
+            bankTransferAvailable={transferOffer.available}
           />
         </div>
       </section>

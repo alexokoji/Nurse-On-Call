@@ -23,14 +23,18 @@ import type { CurrentUser } from '@/lib/auth/current-user';
  *      an under-payment cannot confirm an appointment.
  */
 
-const gateways: Record<Exclude<PaymentProvider, 'manual'>, PaymentGateway> = {
+/* Only the hosted gateways appear here. `bank_transfer` and `manual` are
+   settled by a person, so they have no API to redirect to. */
+const gateways: Record<Exclude<PaymentProvider, 'manual' | 'bank_transfer'>, PaymentGateway> = {
   paystack: new PaystackProvider(),
   flutterwave: new FlutterwaveProvider(),
   korapay: new KorapayProvider(),
 };
 
 export function getGateway(provider: PaymentProvider): PaymentGateway {
-  if (provider === 'manual') throw new PaymentError('Manual payments have no gateway.');
+  if (provider === 'manual' || provider === 'bank_transfer') {
+    throw new PaymentError('That payment method is settled by hand and has no gateway.');
+  }
   const gateway = gateways[provider];
   if (!gateway) throw new PaymentError(`Unknown payment provider: ${provider}`);
   return gateway;
