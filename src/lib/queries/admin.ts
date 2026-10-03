@@ -331,6 +331,13 @@ export async function getPatientStats() {
 }
 
 export async function getAdminPatient(patientId: string) {
+  /* Guard the id shape before Mongoose sees it. `findOne` on a malformed id
+     throws a CastError, which surfaces as a 500 error page — an input problem
+     reported as a server fault. A link built from a missing field produces the
+     literal string "undefined", which is exactly this case. Returning null
+     lets the page render its own not-found instead. */
+  if (!/^[0-9a-fA-F]{24}$/.test(patientId)) return null;
+
   await connectDB();
 
   const [user, profile] = await Promise.all([
