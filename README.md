@@ -224,6 +224,29 @@ hunting.
 
 ---
 
+### Adding to the catalogue
+
+`npm run seed:catalogue` adds a further four categories and ten services —
+maternal and child health, chronic care, nutrition, workplace screening — to a
+real database. Unlike `npm run seed` it writes catalogue rows only: no
+patients, bookings or revenue.
+
+It is additive and safe to re-run. A category or service whose slug already
+exists is left exactly as it is, because an administrator may have changed its
+price, wording or status and a seed script has no business overwriting that. It
+also creates any original category its services need, since a catalogue built
+by hand may only have one or two.
+
+```bash
+MONGODB_URI="<uri>" npm run seed:catalogue -- --dry-run   # show what it would do
+MONGODB_URI="<uri>" npm run seed:catalogue
+```
+
+New services arrive **published and bookable**, at placeholder Port Harcourt
+rates. Review the prices and assign staff in `/admin/services`.
+
+---
+
 ## Development sign-in
 
 All seeded accounts share one password. **These are development credentials
@@ -248,26 +271,27 @@ Change `SEED_ADMIN_PASSWORD` in `.env.local` to use a different one.
 
 ## Commands
 
-| Command                                                    | Does                                                                     |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `npm run dev`                                              | Development server                                                       |
-| `npm run build`                                            | Production build                                                         |
-| `npm start`                                                | Serve the production build                                               |
-| `npm run typecheck`                                        | `tsc --noEmit`                                                           |
-| `npm run lint`                                             | ESLint                                                                   |
-| `npm run format`                                           | Prettier                                                                 |
-| `npm test`                                                 | Vitest (80 tests)                                                        |
-| `npm run seed`                                             | Seed the demo dataset (development only)                                 |
-| `npm run bootstrap`                                        | Roles, settings and one super admin, no demo data (production)           |
-| `npm run verify:bootstrap`                                 | Checks a bootstrapped admin against the login action's conditions        |
-| `npm run smoke`                                            | End-to-end HTTP walk-through of every route (dev server must be running) |
-| `npm run verify:email`                                     | Delivers to a throwaway local SMTP server and inspects the bytes         |
-| `npm run verify:uploads`                                   | Upload route guards: role, folder, size, file signature                  |
-| `npm run verify:reminders`                                 | Proves a reminder sends exactly once                                     |
-| `npm run verify:promotions`                                | 25 concurrent claims against a limit of 5                                |
-| `npm run verify:transfer`                                  | Bank transfer: availability, idempotency, confirmation                   |
-| `npm run verify`                                           | Everything above, in order                                               |
-| `npx tsx scripts/dev-inspect.ts slots home-nursing home 3` | Print real availability for a date                                       |
+| Command                                                    | Does                                                                       |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `npm run dev`                                              | Development server                                                         |
+| `npm run build`                                            | Production build                                                           |
+| `npm start`                                                | Serve the production build                                                 |
+| `npm run typecheck`                                        | `tsc --noEmit`                                                             |
+| `npm run lint`                                             | ESLint                                                                     |
+| `npm run format`                                           | Prettier                                                                   |
+| `npm test`                                                 | Vitest (80 tests)                                                          |
+| `npm run seed`                                             | Seed the demo dataset (development only)                                   |
+| `npm run bootstrap`                                        | Roles, settings and one super admin, no demo data (production)             |
+| `npm run seed:catalogue`                                   | Adds categories and services to a real database; `-- --dry-run` to preview |
+| `npm run verify:bootstrap`                                 | Checks a bootstrapped admin against the login action's conditions          |
+| `npm run smoke`                                            | End-to-end HTTP walk-through of every route (dev server must be running)   |
+| `npm run verify:email`                                     | Delivers to a throwaway local SMTP server and inspects the bytes           |
+| `npm run verify:uploads`                                   | Upload route guards: role, folder, size, file signature                    |
+| `npm run verify:reminders`                                 | Proves a reminder sends exactly once                                       |
+| `npm run verify:promotions`                                | 25 concurrent claims against a limit of 5                                  |
+| `npm run verify:transfer`                                  | Bank transfer: availability, idempotency, confirmation                     |
+| `npm run verify`                                           | Everything above, in order                                                 |
+| `npx tsx scripts/dev-inspect.ts slots home-nursing home 3` | Print real availability for a date                                         |
 
 ---
 

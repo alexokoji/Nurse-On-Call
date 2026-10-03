@@ -11,6 +11,7 @@
     "format": "prettier --write .",
     "seed": "tsx scripts/seed.ts",
     "bootstrap": "tsx --tsconfig scripts/tsconfig.json scripts/bootstrap.ts",
+    "seed:catalogue": "tsx --tsconfig scripts/tsconfig.json scripts/seed-catalogue.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "tsx scripts/smoke.ts",
